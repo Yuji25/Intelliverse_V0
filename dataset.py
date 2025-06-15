@@ -16,7 +16,6 @@ class LaneCuttingDataset(Dataset):
         self.transform = transform if transform is not None else get_transform(train=not is_test)
         self.is_test = is_test
         
-        # Find all image files
         self.image_paths = []
         self.xml_paths = [] if not is_test else None
         
@@ -29,7 +28,6 @@ class LaneCuttingDataset(Dataset):
             if not os.path.exists(annotations_path):
                 continue
                 
-            # Get all JPG files
             for file in os.listdir(annotations_path):
                 if file.lower().endswith('.jpg'):
                     image_path = os.path.join(annotations_path, file)
@@ -58,40 +56,35 @@ class LaneCuttingDataset(Dataset):
         boxes = []
         labels = []
         
-        # Get image size
         size = root.find('size')
         width = float(size.find('width').text)
         height = float(size.find('height').text)
         
         for obj in root.findall('object'):
-            # Get bounding box coordinates
             bbox = obj.find('bndbox')
             xmin = float(bbox.find('xmin').text)
             ymin = float(bbox.find('ymin').text)
             xmax = float(bbox.find('xmax').text)
             ymax = float(bbox.find('ymax').text)
             
-            # Validate box coordinates
             if xmin >= xmax or ymin >= ymax:
                 continue
             if xmin < 0 or ymin < 0 or xmax > width or ymax > height:
                 continue
-            if xmax - xmin < 10 or ymax - ymin < 10:  # Filter out too small boxes
+            if xmax - xmin < 10 or ymax - ymin < 10:
                 continue
                 
-            # Get label
             name = obj.find('name').text.lower()
-            label = 1  # Default to vehicle
+            label = 1
             if 'cutting' in name:
-                label = 2  # Lane cutting vehicle
+                label = 2
             
             boxes.append([xmin, ymin, xmax, ymax])
             labels.append(label)
         
-        # If no valid boxes found, return dummy box and label
         if not boxes:
             boxes = [[0, 0, 1, 1]]
-            labels = [0]  # Background class
+            labels = [0]
             
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
         labels = torch.as_tensor(labels, dtype=torch.int64)
@@ -101,30 +94,24 @@ class LaneCuttingDataset(Dataset):
     def __getitem__(self, idx):
         image_path = self.image_paths[idx]
         
-        # Read and preprocess image
         image = cv2.imread(image_path)
         if image is None:
             raise ValueError(f"Could not read image: {image_path}")
             
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # Convert to RGB
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         
-        # Get original image dimensions
         height, width = image.shape[:2]
         
-        # Convert to PIL Image for transforms
         image = F.to_pil_image(image)
         
-        # Apply transforms
         image = self.transform(image)
         
         if self.is_test:
             return image, image_path
         
-        # Parse XML annotations
         xml_path = self.xml_paths[idx]
         boxes, labels = self.parse_xml(xml_path)
         
-        # Create target dictionary
         target = {
             'boxes': boxes,
             'labels': labels,

@@ -41,14 +41,11 @@ def visualize_detections(image, predictions, threshold=0.3):
     return image
 
 def main():
-    # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logging.info(f"Using device: {device}")
     
-    # Load model
-    model = get_model(num_classes=3)  # background, vehicle, lane_cutting
+    model = get_model(num_classes=3)
     
-    # Load checkpoint
     checkpoint_path = 'checkpoints/best_model.pth'
     if os.path.exists(checkpoint_path):
         checkpoint = torch.load(checkpoint_path, map_location=device)
@@ -60,20 +57,16 @@ def main():
     model = model.to(device)
     model.eval()
     
-    # Create output directory
     output_dir = 'output'
     os.makedirs(output_dir, exist_ok=True)
     
-    # Create CSV file for results
     csv_path = os.path.join(output_dir, 'detections.csv')
     csv_file = open(csv_path, 'w', newline='')
     csv_writer = csv.writer(csv_file)
     csv_writer.writerow(['frame', 'label', 'confidence', 'x1', 'y1', 'x2', 'y2'])
     
-    # Load test dataset
     test_dataset = LaneCuttingDataset('Dataset/Test', transform=None, is_test=True)
     
-    # Process each image
     with torch.no_grad():
         for idx in range(len(test_dataset)):
             image, image_path = test_dataset[idx]
@@ -82,51 +75,41 @@ def main():
             logging.info(f"Processing image {idx+1}/{len(test_dataset)}: {image_path}")
             logging.info(f"Image tensor shape: {image.shape}, range: ({image.min()}, {image.max()})")
             
-            # Add batch dimension
             image = image.unsqueeze(0)
             image = image.to(device)
             
-            # Forward pass
             logging.info(f"Forward pass - Input images shape: {[img.shape for img in image]}")
             predictions = model(image)
-            predictions = predictions[0]  # Get predictions for the single image
+            predictions = predictions[0]
             
-            # Log prediction info
             logging.info(f"Prediction 0 - Boxes: {predictions['boxes'].shape}, Scores: {predictions['scores'].shape}, Labels: {predictions['labels'].shape}")
             if len(predictions['boxes']) > 0:
                 logging.info(f"Max score: {predictions['scores'].max():.4f}, Min score: {predictions['scores'].min():.4f}")
                 logging.info(f"Unique labels: {torch.unique(predictions['labels'])}")
             
-            # Filter predictions by confidence
             mask = predictions['scores'] > 0.3
             filtered_boxes = predictions['boxes'][mask]
             filtered_scores = predictions['scores'][mask]
             filtered_labels = predictions['labels'][mask]
             
-            # Write detections to CSV
             for box, score, label in zip(filtered_boxes, filtered_scores, filtered_labels):
                 x1, y1, x2, y2 = box.cpu().numpy()
                 csv_writer.writerow([frame_name, label.item(), score.item(), x1, y1, x2, y2])
             
-            # Load original image for visualization
             orig_image = cv2.imread(image_path)
             if orig_image is None:
                 logging.error(f"Could not read image: {image_path}")
                 continue
             
-            # Visualize detections
             output_image = visualize_detections(orig_image, predictions)
             
-            # Save output image
             output_path = os.path.join(output_dir, frame_name)
             cv2.imwrite(output_path, output_image)
             logging.info(f"Saved output to {output_path}")
             
-            # Log number of detections
             num_detections = len(filtered_boxes)
             logging.info(f"Found {num_detections} detections")
     
-    # Close CSV file
     csv_file.close()
     logging.info(f"Results saved to {csv_path}")
 
