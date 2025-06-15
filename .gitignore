@@ -1,0 +1,9 @@
+Dataset/
+__pycache__/
+visualizations/
+Temp/
+output/
+best_model.pth
+checkpoint_epoch_1.pth
+checkpoints/
+lane_cutting_detector_final.pth
